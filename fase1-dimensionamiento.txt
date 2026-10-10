@@ -1,0 +1,89 @@
+LABORATORIO 2 - FASE 1: DIMENSIONAMIENTO COLABORATIVO
+Equipo 03 - Caso: Dulce Hogar (Repostería Artesanal)
+Gestión de Servidores Web - Universidad de Oriente
+
+=====================================================================
+PREGUNTA 1: ¿Alcanzan 2 vCPU y 4 GB de RAM? Factor pico.
+=====================================================================
+
+Para el día normal sí alcanzan con mucho margen. Para el pico alcanzan para
+contenido estático, pero con menos margen, que conviene confirmar con una
+prueba de carga antes de un día festivo.
+
+Factor pico: 3,000 / 500 = 6. En festivos el tráfico es 6 veces el normal.
+
+Día normal: una visita al catálogo genera unas 30 peticiones (HTML, CSS, JS
+e imágenes). 500 visitas son unas 15,000 peticiones al día, es decir, unas
+0.17 por segundo en promedio. Los recursos sobran.
+
+Pico: 3,000 visitas son unas 90,000 peticiones al día. Si se concentran en 2
+a 4 horas, serían entre 6 y 12 por segundo, con ráfagas de 20 o más. Apache
+y el backend Express comparten los mismos 2 vCPU y 4 GB, por lo que el margen
+real es menor. Como referencia, en la Clase 20 medimos la API a través del
+proxy: 500 peticiones sin fallos y ~14 ms de promedio. No es una prueba del
+catálogo estático, por eso antes del festivo mediríamos con carga real.
+
+=====================================================================
+PREGUNTA 2: ¿Escalado vertical u horizontal para el pico?
+=====================================================================
+
+Recomendamos el escalado vertical y de forma temporal.
+
+Costo: subir de plan solo se paga durante los pocos días de pico al año. El
+horizontal requiere un balanceador que se paga de forma continua, además de
+varios servidores.
+
+Tiempo: el vertical se aplica en minutos sin cambiar la arquitectura, aunque
+en muchos proveedores implica un reinicio breve, por eso se hace antes del
+festivo y no durante. El horizontal exige configurar el balanceador y que el
+backend pueda compartir sus datos entre servidores.
+
+Presupuesto: una PyME como Dulce Hogar no cuenta con personal de TI para
+administrar varios servidores (el auto-scaling existe en nubes grandes, pero
+requiere conocimientos que no tiene). Lo complementamos con caché de
+archivos estáticos para reducir la carga.
+
+=====================================================================
+PREGUNTA 3: ¿Qué recurso se vigila primero si hay lentitud?
+=====================================================================
+
+Empezaríamos por la RAM: con solo 4 GB compartidos entre el sistema, Apache
+y Express, si se agota el sistema usa swap y el rendimiento cae de golpe.
+En la práctica top y free -h muestran CPU, RAM y swap a la vez, y el primer
+recurso saturado es el cuello de botella.
+
+  1. RAM   (free -h)  : es el recurso más escaso y frena todo si se agota.
+  2. CPU   (top)      : con solo 2 vCPU, un pico de peticiones puede
+                        saturarla.
+  3. Red   (ss -s)    : el catálogo lleva fotos de pasteles; si no están
+                        optimizadas, la red puede saturarse antes que la CPU.
+  4. Disco (df -h)    : un SSD rara vez es el cuello de botella, y Ubuntu
+                        rota los logs de Apache por defecto.
+
+=====================================================================
+PREGUNTA 4: Decisión del equipo: ¿nube o servidor local?
+=====================================================================
+
+Decisión: elegimos NUBE (VPS). De los 4 criterios, 3 favorecen a la nube. Solo
+el control favorece al servidor local, pero para una PyME como Dulce Hogar
+pesa menos que el costo y la capacidad de soportar los picos de 3,000
+visitas. Recomendamos configurar alertas de presupuesto y comparar el costo
+a 3 a 5 años, eligiendo un VPS con transferencia de datos incluida.
+
++----------------+--------------------------+--------------------------+
+| Criterio       | Nube (VPS)               | Servidor local           |
++----------------+--------------------------+--------------------------+
+| Costo inicial  | Bajo: se paga cada mes   | Alto: hay que comprar    |
+|                | y no se compra equipo.   | el hardware necesario.   |
++----------------+--------------------------+--------------------------+
+| Escalabilidad  | Rápida: se amplía el     | Lenta: hay que mejorar   |
+|                | plan en minutos, ideal   | o comprar hardware, con  |
+|                | para los picos festivos. | más gasto y más tiempo.  |
++----------------+--------------------------+--------------------------+
+| Mantenimiento  | A cargo del proveedor    | A cargo de la empresa,   |
+|                | (hardware, energía y     | con su propio personal   |
+|                | red).                    | y su propio costo.       |
++----------------+--------------------------+--------------------------+
+| Control        | Menos control físico     | Control total sobre el   |
+|                | sobre el equipo.         | equipo y los datos.      |
++----------------+--------------------------+--------------------------+

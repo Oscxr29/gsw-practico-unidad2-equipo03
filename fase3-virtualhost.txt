@@ -1,0 +1,193 @@
+LABORATORIO 2 - FASE 3: VIRTUAL HOST + REVERSE PROXY
+Equipo 03 - Caso: Dulce Hogar (Repostería Artesanal)
+Gestión de Servidores Web - Universidad de Oriente
+
+=====================================================================
+COMANDOS EJECUTADOS (WSL2 / Ubuntu)
+=====================================================================
+
+# 1. Crear carpeta del sitio
+sudo mkdir -p /var/www/dulcehogar.local
+sudo chown -R www-data:www-data /var/www/dulcehogar.local
+echo "<h1>Dulce Hogar</h1>" | sudo tee /var/www/dulcehogar.local/index.html
+
+# 2. Crear contenedor Express
+mkdir ~/dulcehogar-api
+cd ~/dulcehogar-api
+npm init -y
+npm install express
+nano index.js
+
+# 3. Registrar servicio systemd
+sudo nano /etc/systemd/system/dulcehogar.service
+sudo systemctl daemon-reload
+sudo systemctl enable dulcehogar
+sudo systemctl start dulcehogar
+sudo systemctl status dulcehogar
+
+# 4. Habilitar módulos proxy
+sudo a2enmod proxy proxy_http headers
+sudo systemctl restart apache2
+
+# 5. Crear Virtual Host
+sudo nano /etc/apache2/sites-available/dulcehogar.local.conf
+sudo a2ensite dulcehogar.local.conf
+sudo apache2ctl configtest
+sudo systemctl reload apache2
+echo "127.0.0.1 dulcehogar.local" | sudo tee -a /etc/hosts
+
+# 6. Windows PowerShell (Admin)
+Add-Content C:\Windows\System32\drivers\etc\hosts "127.0.0.1 dulcehogar.local"
+Add-Content C:\Windows\System32\drivers\etc\hosts "::1 dulcehogar.local"
+
+# 7. Probar
+curl "http://dulcehogar.local/api/saludo?nombre=Equipo"
+curl "http://dulcehogar.local/api/cotizacion?nombre=Isvi&telefono=7777&producto=pastel"
+
+=====================================================================
+CONTENIDO DE index.js
+=====================================================================
+
+const express = require('express');
+const app = express();
+const PORT = 9000;
+
+app.get('/api/saludo', (req, res) => {
+  const nombre = req.query.nombre || 'Mundo';
+  res.json({ mensaje: `Hola, ${nombre}`, desde: 'dulcehogar:9000' });
+});
+
+app.get('/api/cotizacion', (req, res) => {
+  const { nombre, telefono, producto } = req.query;
+  res.json({
+    cotizacionId: Date.now(),
+    nombre: nombre || 'Sin nombre',
+    telefono: telefono || 'Sin telefono',
+    producto: producto || 'Sin producto',
+    fecha: new Date().toISOString().split('T')[0],
+    estado: 'pendiente'
+  });
+});
+
+app.listen(PORT, () => {
+  console.log(`dulcehogar escuchando en http://localhost:${PORT}`);
+});
+
+=====================================================================
+CONTENIDO DE dulcehogar.service
+=====================================================================
+
+[Unit]
+Description=Dulce Hogar API
+After=network.target
+
+[Service]
+Type=simple
+User=isvij
+WorkingDirectory=/home/isvij/dulcehogar-api
+ExecStart=/usr/bin/node /home/isvij/dulcehogar-api/index.js
+Restart=on-failure
+RestartSec=10
+StandardOutput=append:/home/isvij/dulcehogar-api/out.log
+StandardError=append:/home/isvij/dulcehogar-api/err.log
+
+[Install]
+WantedBy=multi-user.target
+
+=====================================================================
+CONTENIDO DE dulcehogar.local.conf
+=====================================================================
+
+<VirtualHost *:80>
+    ServerName dulcehogar.local
+    DocumentRoot /var/www/dulcehogar.local
+
+    ProxyPreserveHost On
+    ProxyPass /api http://localhost:9000/api
+    ProxyPassReverse /api http://localhost:9000/api
+
+    ErrorLog ${APACHE_LOG_DIR}/dulcehogar.local-error.log
+    CustomLog ${APACHE_LOG_DIR}/dulcehogar.local-access.log combined
+</VirtualHost>
+
+=====================================================================
+RESULTADOS OBTENIDOS
+=====================================================================
+
+- Contenedor Express corriendo en :9000 (systemd: active)
+- Virtual Host habilitado (a2ensite exitoso)
+- configtest: Syntax OK
+- curl vía Apache: {"mensaje":"Hola, Equipo","desde":"dulcehogar:9000"}
+
+Captura: fase3-curl-exitoso.png
+
+=====================================================================
+PREGUNTA 1: ¿Qué hace ProxyPass /api http://localhost:9000/api?
+=====================================================================
+
+Reenvía todas las peticiones que empiecen con /api a la aplicación 
+backend Express que corre en localhost:9000. Cuando el cliente pide
+http://dulcehogar.local/api/saludo, Apache no procesa esa petición,
+sino que la transfiere internamente a http://localhost:9000/api/saludo,
+recibe la respuesta del contenedor y se la devuelve al cliente como si
+fuera suya. El cliente nunca sabe que hay dos servidores trabajando.
+
+=====================================================================
+PREGUNTA 2: ¿Diferencia entre ProxyPass y ProxyPassReverse?
+=====================================================================
+
+ProxyPass se encarga de reenviar las peticiones del cliente desde Apache 
+hacia el backend Express, mientras que ProxyPassReverse ajusta determinadas 
+cabeceras de respuesta del backend, especialmente Location, para que las 
+redirecciones utilicen la dirección del proxy en lugar de la dirección 
+interna del backend.
+
+Dicho de otra manera, ProxyPass indica «envía esta petición al backend» 
+y ProxyPassReverse permite que, cuando el backend responda con una redirección, 
+Apache ajuste la dirección correspondiente para que el cliente continúe 
+accediendo mediante el dominio configurado.
+
+De esta forma, ambas directivas facilitan la comunicación entre Apache y Express 
+sin que el cliente tenga que acceder directamente al puerto 9000.
+=====================================================================
+PREGUNTA 3: Reto — ¿Qué pasa si configtest falla?
+=====================================================================
+
+Si configtest falla, significa que Apache ha detectado un problema en 
+la configuración analizada. Antes de recargar o reiniciar el servicio, 
+se debe identificar y corregir el error. Si Apache ya estaba funcionando, 
+podría continuar utilizando la configuración anterior, dependiendo de la 
+situación.
+
+Pasos para depurar el problema:
+
+Ejecutar sudo apache2ctl configtest y leer el mensaje de error.
+
+Revisar el archivo de configuración indicado, prestando atención a las 
+directivas, los nombres de los módulos y el cierre de las etiquetas, 
+como </VirtualHost>.
+
+Verificar que los módulos necesarios estén habilitados con sudo a2enmod 
+proxy proxy_http headers.
+
+Volver a ejecutar sudo apache2ctl configtest y, cuando indique Syntax OK, 
+recargar Apache con sudo systemctl reload apache2.
+
+=====================================================================
+PREGUNTA 4: ¿Por qué es prueba de conexión U1 + U2?
+=====================================================================
+
+La respuesta JSON obtenida mediante curl es una evidencia de la integración 
+entre Apache y Express. La petición se realiza a través del dominio 
+dulcehogar.local, que utiliza el puerto 80 de Apache, y se reenvía al 
+backend Express, que escucha en el puerto 9000.
+
+Respuesta obtenida:
+
+{"mensaje":"Hola, Equipo","desde":"dulcehogar:9000"}
+
+Esta respuesta, obtenida al realizar la solicitud a través del dominio 
+configurado en Apache, junto con la configuración del Virtual Host y las 
+pruebas de conectividad, permite comprobar que ambos componentes se
+comunican correctamente. Apache recibe la petición y la reenvía a Express, 
+que procesa la solicitud y devuelve la respuesta JSON al cliente.

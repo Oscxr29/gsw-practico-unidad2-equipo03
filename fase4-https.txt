@@ -1,0 +1,158 @@
+LABORATORIO 2 - FASE 4: HTTPS CON MKCERT
+Equipo 03 - Caso: Dulce Hogar (Repostería Artesanal)
+Gestión de Servidores Web - Universidad de Oriente
+
+=====================================================================
+COMANDOS EJECUTADOS (WSL2 / Ubuntu)
+=====================================================================
+
+# 1. Instalar mkcert
+sudo apt update
+sudo apt install -y libnss3-tools wget
+wget -O mkcert https://github.com/FiloSottile/mkcert/releases/download/v1.4.4/mkcert-v1.4.4-linux-amd64
+chmod +x mkcert
+sudo mv mkcert /usr/local/bin/mkcert
+mkcert -install
+
+# 2. Generar certificado
+cd ~
+mkcert dulcehogar.local
+sudo mkdir -p /etc/apache2/ssl/dulcehogar.local
+sudo mv dulcehogar.local.pem dulcehogar.local-key.pem /etc/apache2/ssl/dulcehogar.local/
+sudo chmod 600 /etc/apache2/ssl/dulcehogar.local/*.pem
+ls -la /etc/apache2/ssl/dulcehogar.local/
+
+# 3. Editar ports.conf
+sudo nano /etc/apache2/ports.conf
+
+# 4. Crear Virtual Host SSL
+sudo nano /etc/apache2/sites-available/dulcehogar.local-ssl.conf
+sudo a2enmod ssl
+sudo a2ensite dulcehogar.local-ssl.conf
+sudo apache2ctl configtest
+sudo systemctl restart apache2
+sudo ss -tlnp | grep apache2
+
+# 5. Importar CA en Windows
+cp $(mkcert -CAROOT)/rootCA.pem /mnt/c/Users/isvij/Desktop/
+
+# 6. Windows PowerShell (Admin)
+certutil -addstore -f "ROOT" C:\Users\isvij\Desktop\rootCA.pem
+
+# 7. Probar HTTPS
+curl -I https://dulcehogar.local:8900/
+curl "https://dulcehogar.local:8900/api/saludo?nombre=Equipo"
+curl "https://dulcehogar.local:8900/api/cotizacion?nombre=Isvi&telefono=7777&producto=pastel"
+
+=====================================================================
+CONTENIDO DE ports.conf
+=====================================================================
+
+Listen 80
+Listen 8085
+Listen 8090
+Listen 8900
+
+<IfModule ssl_module>
+        Listen 443
+        Listen 4443
+</IfModule>
+
+<IfModule mod_gnutls.c>
+        Listen 443
+</IfModule>
+
+=====================================================================
+CONTENIDO DE dulcehogar.local-ssl.conf
+=====================================================================
+
+<IfModule mod_ssl.c>
+<VirtualHost *:8900>
+    ServerName dulcehogar.local
+    DocumentRoot /var/www/dulcehogar.local
+
+    SSLEngine on
+    SSLCertificateFile /etc/apache2/ssl/dulcehogar.local/dulcehogar.local.pem
+    SSLCertificateKeyFile /etc/apache2/ssl/dulcehogar.local/dulcehogar.local-key.pem
+
+    ProxyPreserveHost On
+    ProxyPass /api http://localhost:9000/api
+    ProxyPassReverse /api http://localhost:9000/api
+</VirtualHost>
+</IfModule>
+
+=====================================================================
+RESULTADOS OBTENIDOS
+=====================================================================
+
+- mkcert -install: CA local creada e instalada
+- Certificado generado: dulcehogar.local.pem + dulcehogar.local-key.pem
+- CA importada en Windows: CertUtil completado correctamente
+- Puerto 8900 escuchando
+- HTTPS: HTTP/1.1 200 OK
+- Navegador: candado verde sin advertencia
+
+Captura: fase4-https-sin-advertencia.png
+
+=====================================================================
+PREGUNTA 1: ¿Por qué certbot no funciona para dulcehogar.local?
+=====================================================================
+
+Let's Encrypt, mediante Certbot, no emite certificados públicamente 
+confiables para nombres internos como dulcehogar.local, ya que estos 
+nombres no cumplen los requisitos necesarios para obtener un certificado 
+público. Los dominios terminados en .local se utilizan habitualmente en 
+redes y entornos de desarrollo local.
+
+Para solucionar esta situación, se utiliza mkcert, una herramienta que 
+crea una Autoridad Certificadora (CA) local y genera certificados firmados 
+por ella. Estos certificados pueden ser reconocidos como confiables por los 
+equipos donde se haya instalado dicha CA, lo que permite utilizar HTTPS en 
+un entorno de desarrollo sin necesidad de publicar la aplicación en Internet.
+
+=====================================================================
+PREGUNTA 2: ¿Diferencia entre autofirmado y mkcert?
+=====================================================================
+
+Un certificado autofirmado está firmado por su propio emisor y normalmente
+genera advertencias en el navegador cuando este no confía en él. En cambio, 
+mkcert crea una Autoridad Certificadora (CA) local y utiliza esa autoridad 
+para firmar los certificados generados. Cuando la CA está instalada como 
+confiable y el certificado corresponde al dominio solicitado, el navegador 
+puede aceptarlo sin mostrar advertencias de seguridad.
+
+Ambas opciones pueden utilizarse en entornos locales, pero mkcert facilita 
+la gestión de certificados confiables para el desarrollo sin necesitar un 
+dominio público ni un certificado emitido por una autoridad certificadora 
+comercial.
+
+=====================================================================
+PREGUNTA 3: Reto — ¿Qué cambiarían para dominio público?
+=====================================================================
+
+Si  se desplegara en un dominio público real (dulcehogar.com.sv),se cambiaría:
+
+1. Certificado: usar certbot con Let's Encrypt para obtener un certificado 
+públicamente confiable.
+2. Puerto: configurar HTTPS en el puerto estándar 443.
+3. DNS: apuntar el dominio real a la IP pública del servidor
+4. ServerName: cambiar dulcehogar.local por dulcehogar.com.sv
+5. Redirect: configurar redirección de HTTP (80) a HTTPS (443)
+6. Renovación: configurar y comprobar el mecanismo de renovación automática 
+del certificado, teniendo en cuenta su período de validez.
+
+=====================================================================
+PREGUNTA 4: Captura sin advertencia
+=====================================================================
+
+Captura: fase4-https-sin-advertencia.png
+
+Muestra:
+- URL: https://dulcehogar.local:8900/api/saludo?nombre=Equipo
+- Candado verde (sin advertencia)
+- Respuesta JSON: {"mensaje":"Hola, Equipo","desde":"dulcehogar:9000"}
+- Visor de certificados con "mkcert development CA"
+
+Esta evidencia permite comprobar que la conexión HTTPS funciona sin advertencias 
+en el navegador y que la API responde a través del Virtual Host configurado en 
+Apache.

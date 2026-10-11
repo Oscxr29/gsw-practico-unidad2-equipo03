@@ -20,9 +20,9 @@ reverse proxy hacia un backend Express/TypeScript y HTTPS local con mkcert.
 |---|---|---|
 | Oscar Aguilar | Coordinador / Git | 1 y transversal |
 | Jorge Lara | Adm. de Servidor Base | 2 |
-| (nombre) | Adm. de Redes / Proxy | 3 |
-| (nombre) | Adm. de Certificados | 4 |
-| Zeke | Adm. de Permisos | 3 y 4 |
+| Jonathan De la O | Adm. de Redes / Proxy | 3 |
+| Julio Ventura  | Adm. de Certificados | 4 |
+| Ezequiel Reyes | Adm. de Permisos | 3 y 4 |
 | Isvi Castillo | Documentador / QA | todas |
 
 ## Errores encontrados

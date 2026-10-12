@@ -156,3 +156,43 @@ Muestra:
 Esta evidencia permite comprobar que la conexión HTTPS funciona sin advertencias 
 en el navegador y que la API responde a través del Virtual Host configurado en 
 Apache.
+
+=====================================================================
+EVIDENCIA ADICIONAL: equipo de Julio Ventura (Linux Mint 22.3 nativo)
+Adm. de Certificados (SSL)
+=====================================================================
+
+$ ls -la /etc/apache2/ssl/dulcehogar.local/
+total 16
+drwxr-xr-x 2 root  root  4096 Oct 10 15:35 .
+drwxr-xr-x 3 root  root  4096 Oct 10 15:35 ..
+-rw------- 1 julio julio 1704 Oct 10 15:35 dulcehogar.local-key.pem
+-rw------- 1 julio julio 1472 Oct 10 15:35 dulcehogar.local.pem
+
+$ ss -tln (puertos de Apache)
+LISTEN 0      511                *:80               *:*          
+LISTEN 0      511                *:443              *:*          
+LISTEN 0      511                *:8900             *:*          
+LISTEN 0      511                *:4443             *:*          
+LISTEN 0      511                *:8085             *:*          
+LISTEN 0      511                *:8090             *:*          
+
+$ curl -I --resolve dulcehogar.local:8900:127.0.0.1 https://dulcehogar.local:8900/
+HTTP/1.1 200 OK
+$ curl --resolve dulcehogar.local:8900:127.0.0.1 "https://dulcehogar.local:8900/api/saludo?nombre=Equipo"
+{"mensaje":"Hola, Equipo","desde":"dulcehogar:9000"}
+$ curl --resolve dulcehogar.local:8900:127.0.0.1 "https://dulcehogar.local:8900/api/cotizacion?nombre=Julio&telefono=7777&producto=pastel"
+{"cotizacionId":1791823008164,"nombre":"Julio","telefono":"7777","producto":"pastel","fecha":"2026-10-12","estado":"pendiente"}
+
+Errores encontrados en este equipo y su solucion:
+1. Apache no arrancaba (AH02291): un vhost viejo (blog.local.conf) tenia
+   $(APACHE_LOG_DIR) en vez de ${APACHE_LOG_DIR}. Se detecto con
+   apache2ctl configtest y se corrigio la variable.
+2. 503 Service Unavailable en /api: dulcehogar.service fallaba con
+   "Cannot find module index.js" porque el archivo no existia.
+   Se creo index.js y se reinicio el servicio.
+3. mkcert -install no instalo la CA en Firefox: mkcert v1.4.4 solo busca
+   perfiles en ~/.mozilla/firefox y este perfil esta en
+   ~/.config/mozilla/firefox. Se importo rootCA.pem con certutil -A.
+4. /etc/hosts no se podia modificar en este equipo. Se uso
+   curl --resolve en las pruebas y network.dns.localDomains en Firefox.

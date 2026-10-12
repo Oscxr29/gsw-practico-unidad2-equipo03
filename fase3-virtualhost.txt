@@ -149,6 +149,14 @@ accediendo mediante el dominio configurado.
 
 De esta forma, ambas directivas facilitan la comunicación entre Apache y Express 
 sin que el cliente tenga que acceder directamente al puerto 9000.
+
+Nota técnica adicional (Rol: Adm. de Redes / Proxy):
+- ProxyPreserveHost On: Conserva la cabecera Host original del cliente
+  (dulcehogar.local) en lugar de sobrescribirla con localhost:9000. Esto
+  es fundamental para que el backend reconozca el dominio solicitado.
+- Aislamiento de capas: El puerto 9000 queda confinado a la red interna
+  (localhost/WSL2), mientras que el puerto 80 queda expuesto al cliente,
+  garantizando que toda petición pase por el filtrado y logs de Apache.
 =====================================================================
 PREGUNTA 3: Reto — ¿Qué pasa si configtest falla?
 =====================================================================
